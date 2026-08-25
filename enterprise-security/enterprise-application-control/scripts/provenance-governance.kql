@@ -1,0 +1,65 @@
+// provenance-governance.kql — COMPLETENESS-FIRST governance inventory
+// Every executable running from user-writable paths, no provenance gate.
+// For vetting: "what do we need to review?" — nothing excluded except vendor noise.
+// Run in MDE Advanced Hunting portal → export CSV → feed to portable-app-discovery.ps1
+
+let lookback = 90d;   // 90 days for quarterly tools. 30d works too.
+DeviceProcessEvents
+| where Timestamp > ago(lookback)
+| where FileName endswith ".exe" or FileName endswith ".dll"
+// Real users only
+| where not(isempty(AccountUpn))
+// --- VENDOR NOISE PRE-FILTER (kills Microsoft/Google/Adobe etc. cheaply) ---
+| where isempty(ProcessVersionInfoCompanyName)
+     or ProcessVersionInfoCompanyName !in~ (
+         "Microsoft Corporation", "Google LLC", "Google Inc",
+         "Adobe Inc.", "Adobe Systems Incorporated",
+         "Oracle America, Inc.", "Intel Corporation",
+         "NVIDIA Corporation", "Advanced Micro Devices, Inc.",
+         "Apple Inc.", "Mozilla Corporation", "Opera Software",
+         "Amazon Web Services, Inc.", "Salesforce.com, Inc.",
+         "Citrix Systems, Inc.", "VMware, Inc.", "Dell Inc.",
+         "HP Inc.", "Lenovo", "Logitech Inc."
+     )
+// --- PATH FILTER: user-writable locations (completeness, not exclusion) ---
+| where FolderPath has "Downloads"
+     or FolderPath has "Desktop"
+     or FolderPath has @"AppData\Local\Temp\"
+     or FolderPath has @"Windows\Temp\"
+     or (FolderPath has @"AppData\Local\" and FolderPath !has "Microsoft")
+     or FolderPath has @"AppData\Roaming\"
+     or FolderPath matches regex @"^[D-Z]:\\"
+// NOTE: NO setup/install exclusion — installers are governance-relevant.
+// NOTE: NO DistinctDays filter — one-shots need vetting too.
+| where isnotempty(SHA1)
+// Per-device stats
+| summarize
+    ExecCount = count(),
+    DistinctDays = dcount(bin(Timestamp, 1d)),
+    DistinctUsers = dcount(AccountUpn),
+    FirstExec = min(Timestamp),
+    LastExec = max(Timestamp),
+    CompanyName = take_any(ProcessVersionInfoCompanyName),
+    ProductName = take_any(ProcessVersionInfoProductName),
+    OriginalFileName = take_any(ProcessVersionInfoOriginalFileName),
+    ProcessIntegrityLevel = take_any(ProcessIntegrityLevel),
+    ParentProcess = take_any(InitiatingProcessParentFileName),
+    ExampleCommandLine = take_any(ProcessCommandLine)
+    by DeviceName, SHA1, FileName, FolderPath
+// File-level rollup
+| summarize
+    DeviceCount = dcount(DeviceName),
+    UserCount = dcount(DistinctUsers),
+    DistinctDays = max(DistinctDays),
+    ExecutionCount = sum(ExecCount),
+    FirstSeenAny = min(FirstExec),
+    LastSeenAny = max(LastExec),
+    CompanyName = take_any(CompanyName),
+    ProductName = take_any(ProductName),
+    OriginalFileName = take_any(OriginalFileName),
+    ProcessIntegrityLevel = take_any(ProcessIntegrityLevel),
+    ParentProcess = take_any(ParentProcess),
+    ExampleCommandLine = take_any(ExampleCommandLine),
+    TopFolderPath = take_any(FolderPath)
+    by SHA1, FileName
+| order by DeviceCount desc, DistinctDays desc

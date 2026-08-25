@@ -1,0 +1,58 @@
+// provenance.kql — Portable App Discovery (core query, fast)
+// Companion to scripts/portable-app-discovery.ps1
+// Run in MDE Advanced Hunting → export CSV → score with PS script.
+// For full enrichment joins (TVM, SmartScreen, Alerts, Network), use the full query variant
+
+let lookback = 30d;
+let UserIntroducedFiles = (
+    DeviceFileEvents
+    | where Timestamp > ago(lookback)
+    | where ActionType == "FileCreated"
+    | where FileName endswith ".exe" or FileName endswith ".dll"
+    | where InitiatingProcessFileName in~ (
+        "chrome.exe", "firefox.exe", "msedge.exe", "iexplore.exe",
+        "opera.exe", "brave.exe", "outlook.exe", "thunderbird.exe",
+        "7z.exe", "7zFM.exe", "WinRAR.exe", "peazip.exe",
+        "explorer.exe", "wget.exe", "curl.exe"
+    )
+    | where isnotempty(SHA1)
+    | project Timestamp, DeviceName, SHA1, FileName_Created=FileName,
+              FileOriginUrl, FileOriginReferrerUrl,
+              InitiatingProcessFileName_Create=InitiatingProcessFileName
+);
+let ExecutedFiles = (
+    DeviceProcessEvents
+    | where Timestamp > ago(lookback)
+    | where FileName endswith ".exe"
+    | where not(isempty(AccountUpn))
+    | where FileName !contains "setup" and FileName !contains "install"
+    | where FolderPath has "Downloads" or FolderPath has "Desktop"
+         or FolderPath has @"AppData\Local\Temp\" or FolderPath has @"Windows\Temp\"
+         or FolderPath has @"AppData\Local\" or FolderPath has @"AppData\Roaming\"
+         or FolderPath matches regex @"^[D-Z]:\\"
+    | where isnotempty(SHA1)
+    | summarize ExecCount=count(), DistinctDays=dcount(bin(Timestamp,1d)),
+        DistinctUsers=dcount(AccountUpn),
+        CompanyName=take_any(ProcessVersionInfoCompanyName),
+        ProductName=take_any(ProcessVersionInfoProductName),
+        OriginalFileName=take_any(ProcessVersionInfoOriginalFileName),
+        ProcessIntegrityLevel=take_any(ProcessIntegrityLevel),
+        ParentProcess=take_any(InitiatingProcessParentFileName),
+        ExampleCommandLine=take_any(ProcessCommandLine)
+        by DeviceName, SHA1, FileName, FolderPath
+);
+UserIntroducedFiles
+| join kind=inner hint.shufflekey = SHA1 (ExecutedFiles) on DeviceName, SHA1
+| summarize DeviceCount=dcount(DeviceName), UserCount=dcount(DistinctUsers),
+    DistinctDays=max(DistinctDays), ExecutionCount=sum(ExecCount),
+    ExampleOriginUrl=take_any(FileOriginUrl),
+    ExampleReferrerUrl=take_any(FileOriginReferrerUrl),
+    ExampleInitiator=take_any(InitiatingProcessFileName_Create),
+    CompanyName=take_any(CompanyName), ProductName=take_any(ProductName),
+    OriginalFileName=take_any(OriginalFileName),
+    ProcessIntegrityLevel=take_any(ProcessIntegrityLevel),
+    ParentProcess=take_any(ParentProcess),
+    ExampleCommandLine=take_any(ExampleCommandLine),
+    TopFolderPath=take_any(FolderPath)
+    by SHA1, FileName
+| order by DeviceCount desc

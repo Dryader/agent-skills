@@ -1,0 +1,212 @@
+// provenance-full.kql — Full enrichment version (8 joins)
+// Use when you want TVM, SmartScreen, Alerts, Network, and Cert info.
+// Run in MDE Advanced Hunting portal (NOT Sentinel — TVM/Alerts tables unavailable there).
+
+let lookback = 30d;
+let UserIntroducedFiles = (
+    DeviceFileEvents
+    | where Timestamp > ago(lookback)
+    | where ActionType == "FileCreated"
+    | where FileName endswith ".exe" or FileName endswith ".dll"
+    | extend InitiatorClass = case(
+        InitiatingProcessFileName in~ ("chrome.exe","firefox.exe","msedge.exe","iexplore.exe","opera.exe","brave.exe"), "Browser",
+        InitiatingProcessFileName in~ ("outlook.exe","thunderbird.exe"), "Email",
+        InitiatingProcessFileName in~ ("7z.exe","7zFM.exe","WinRAR.exe","peazip.exe"), "Archive",
+        InitiatingProcessFileName in~ ("winword.exe","excel.exe","powerpnt.exe","msaccess.exe","visio.exe","mspub.exe"), "OfficeMacro",
+        InitiatingProcessFileName in~ ("powershell.exe","pwsh.exe","cmd.exe","wscript.exe","cscript.exe","mshta.exe","rundll32.exe"), "ScriptHost",
+        InitiatingProcessFileName in~ ("explorer.exe","wget.exe","curl.exe"), "Explorer",
+        "Other")
+    | where InitiatorClass != "Other"
+    | where isnotempty(SHA1)
+    | project Timestamp, DeviceName, SHA1, FileName_Created=FileName,
+              FileCreationTime=Timestamp,
+              FileOriginUrl, FileOriginReferrerUrl,
+              InitiatingProcessFileName_Create=InitiatingProcessFileName,
+              InitiatorClass
+);
+let ExecutedFiles = (
+    DeviceProcessEvents
+    | where Timestamp > ago(lookback)
+    | where FileName endswith ".exe"
+    | where not(isempty(AccountUpn))
+    | where FileName !contains "setup" and FileName !contains "install"
+    | where FolderPath has "Downloads" or FolderPath has "Desktop"
+         or FolderPath has @"AppData\Local\Temp\" or FolderPath has @"Windows\Temp\"
+         or FolderPath has @"AppData\Local\" or FolderPath has @"AppData\Roaming\"
+         or FolderPath matches regex @"^[D-Z]:\\"
+    | where isnotempty(SHA1)
+    // Department enrichment (governance: "who is using it?")
+    | join kind=leftouter hint.shufflekey = AccountUpn (
+        IdentityInfo | distinct AccountUpn, Department, JobTitle
+    ) on AccountUpn
+    | summarize ExecCount=count(), DistinctDays=dcount(bin(Timestamp,1d)),
+        DistinctUsers=dcount(AccountUpn),
+        CompanyName=take_any(ProcessVersionInfoCompanyName),
+        ProductName=take_any(ProcessVersionInfoProductName),
+        OriginalFileName=take_any(ProcessVersionInfoOriginalFileName),
+        ProcessIntegrityLevel=take_any(ProcessIntegrityLevel),
+        ParentProcess=take_any(InitiatingProcessParentFileName),
+        ExampleCommandLine=take_any(ProcessCommandLine),
+        Departments=make_set(Department, 5)
+        by DeviceName, SHA1, FileName, FolderPath
+);
+let ProvenanceCandidates = (
+    UserIntroducedFiles
+    | join kind=inner hint.shufflekey = SHA1 (ExecutedFiles) on DeviceName, SHA1
+    | summarize DeviceCount=dcount(DeviceName), UserCount=dcount(DistinctUsers),
+        DistinctDays=max(DistinctDays), ExecutionCount=sum(ExecCount),
+        FirstSeenAny=min(FileCreationTime),
+        ExampleOriginUrl=take_any(FileOriginUrl),
+        ExampleReferrerUrl=take_any(FileOriginReferrerUrl),
+        ExampleInitiator=take_any(InitiatingProcessFileName_Create),
+        ExampleInitiatorClass=take_any(InitiatorClass),
+        CompanyName=take_any(CompanyName), ProductName=take_any(ProductName),
+        OriginalFileName=take_any(OriginalFileName),
+        ProcessIntegrityLevel=take_any(ProcessIntegrityLevel),
+        ParentProcess=take_any(ParentProcess),
+        ExampleCommandLine=take_any(ExampleCommandLine),
+        Departments=take_any(Departments),
+        TopFolderPath=take_any(FolderPath)
+        by SHA1, FileName
+);
+let TvmInventory = (
+    DeviceTvmSoftwareInventory
+    | distinct SoftwareName, SoftwareVendor
+);
+ProvenanceCandidates
+| extend ShortName = substring(FileName, 0, strlen(FileName) - 4)
+| join kind=leftouter hint.shufflekey = ShortName (
+    TvmInventory | extend ShortName = SoftwareName
+) on ShortName
+| extend InTvmInventory = iff(isnotempty(SoftwareVendor), "True", "False")
+// SmartScreen
+| join kind=leftouter hint.shufflekey = SHA1 (
+    DeviceEvents
+    | where Timestamp > ago(lookback)
+    | where ActionType in ("SmartScreenAppWarning", "SmartScreenUserOverride")
+    | where isnotempty(SHA1)
+    | extend Experience = tostring(parse_json(AdditionalFields).Experience)
+    | summarize SmartScreenVerdict = iff(countif(ActionType == "SmartScreenUserOverride") > 0,
+        "UserOverride", "AppWarning"), SmartScreenExperience = take_any(Experience)
+        by SHA1
+) on SHA1
+// Defender Alerts
+| join kind=leftouter hint.shufflekey = SHA1 (
+    AlertEvidence
+    | where Timestamp > ago(90d)
+    | where EntityType == "File"
+    | where isnotempty(SHA1)
+    | summarize DefenderAlerts = count(), AlertTitles = make_set(Title, 5),
+        AlertSeverities = make_set(Severity, 5),
+        IsMalwareAlert = iff(countif(isnotempty(ThreatFamily)) > 0, "True", "False")
+        by SHA1
+) on SHA1
+// Network
+| join kind=leftouter hint.shufflekey = SHA1 (
+    DeviceNetworkEvents
+    | where Timestamp > ago(lookback)
+    | where isnotempty(InitiatingProcessSHA1)
+    | summarize NetworkConnections = count(), UniqueDestIPs = dcount(RemoteIP),
+        TopDestUrls = make_set(RemoteUrl, 10), TopDestIPs = make_set(RemoteIP, 10),
+        TopDestPorts = make_set(tostring(RemotePort), 10)
+        by SHA1 = InitiatingProcessSHA1
+) on SHA1
+// Cert info
+| join kind=leftouter hint.shufflekey = SHA1 (
+    DeviceFileCertificateInfo
+    | where Timestamp > ago(90d)
+    | summarize arg_max(Timestamp, *) by SHA1
+    | project SHA1, IsSigned, IsTrusted, Signer, Issuer,
+              IsRootSignerMicrosoft, SignatureType
+) on SHA1
+// ── STEP 9: PERSISTENCE DETECTION (T1547.001 / T1053.005) ──
+// HKLM Run keys + schtasks /create pointing at user-writable paths.
+// NOTE: MDE tracks HKLM only — HKCU Run keys are NOT captured by Advanced Hunting.
+| join kind=leftouter hint.shufflekey = SHA1 (
+    // Run key persistence: registry value data references our executable
+    DeviceRegistryEvents
+    | where Timestamp > ago(lookback)
+    | where ActionType == "RegistryValueSet"
+    | where RegistryKey has @"\CurrentVersion\Run" or RegistryKey has @"\CurrentVersion\RunOnce"
+    | where isnotempty(RegistryValueData)
+    | extend RunExe = tostring(parse_path(RegistryValueData).FileName)
+    | where isnotempty(RunExe)
+    | join kind=inner (
+        ProvenanceCandidates | project SHA1, FileName
+    ) on $left.RunExe == $right.FileName
+    | summarize PersistenceDetected = "True" by SHA1
+) on SHA1
+| extend PersistenceDetected = iff(isempty(PersistenceDetected), "False", PersistenceDetected)
+// Scheduled task creation pointing at user-writable payload
+| join kind=leftouter hint.shufflekey = SHA1 (
+    DeviceProcessEvents
+    | where Timestamp > ago(lookback)
+    | where FileName =~ "schtasks.exe"
+    | where ProcessCommandLine has "/create" or ProcessCommandLine has "-create"
+    | extend TaskAction = extract(@"(?i)/tr\s+[""']?([^""']+)", 1, ProcessCommandLine)
+    | where isnotempty(TaskAction)
+    | where TaskAction has @"\Users\" or TaskAction has @"\Temp\" or TaskAction has @"\AppData\" or TaskAction has @"\Downloads\"
+    | join kind=inner (
+        ProvenanceCandidates | project SHA1, FileName
+    ) on $left.TaskAction has $right.FileName
+    | summarize PersistenceTask = "True" by SHA1
+) on SHA1
+| extend PersistenceDetected = iff(PersistenceDetected == "True" or isnotempty(PersistenceTask), "True", PersistenceDetected)
+| project-away PersistenceTask
+| project-away ShortName, ShortName1
+// ── STEP 10: AI TOOL DETECTION (shadow AI governance — MCP-verified names) ──
+| extend LowerName = tolower(FileName), LowerCompany = tolower(CompanyName), LowerProduct = tolower(ProductName)
+| extend IsAITool = iff(
+    LowerName has_any ("claude", "codex", "cursor", "copilot", "ollama", "openclaw", "clawpilot",
+                       "gemini", "windsurf", "devin", "kiro", "antigravity", "goose", "cline",
+                       "roo-code", "roo code", "junie", "warp", "chatgpt", "perplexity", "poe",
+                       "lm studio", "llama", "aider", "continue")
+    or LowerCompany has_any ("anthropic", "openai", "google", "mistral", "anysphere", "cursor",
+                             "olama", "ollama", "north pole", "replicate", "together", "groq")
+    or LowerProduct has_any ("claude", "codex", "cursor", "copilot", "ollama", "openclaw", "chatgpt"),
+    "True", "False")
+| project-away LowerName, LowerCompany, LowerProduct
+// ── STEP 11: NON-STANDARD PORTS (cheap beaconing proxy) ──
+| extend NonStandardPorts = iff(
+    array_length(set_difference(TopDestPorts, dynamic(["80","443","53","8080"]))) > 0, "True", "False")
+// ── STEP 12: DLL SIDE-LOADING (T1574.002) — scoped to our candidates only ──
+// Candidate exe loads an unsigned DLL from its own directory.
+// FP-managed: only fires for candidates, not fleet-wide. Electron/Teams excluded
+// by the initiator filter upstream (they arrive via installers/updaters, not browsers).
+| join kind=leftouter hint.shufflekey = SHA1 (
+    DeviceImageLoadEvents
+    | where Timestamp > ago(lookback)
+    | where isnotempty(InitiatingProcessSHA1)
+    | where FileName endswith ".dll"
+    // DLL must live in the same folder as the candidate exe
+    | where FolderPath has "Downloads" or FolderPath has "Desktop"
+         or FolderPath has @"AppData\Local\" or FolderPath has @"AppData\Roaming\"
+    | join kind=inner (
+        ProvenanceCandidates | project SHA1, TopFolderPath
+    ) on $left.InitiatingProcessSHA1 == $right.SHA1
+    | where tolower(tostring(parse_path(FolderPath).DirectoryPath)) == tolower(tostring(parse_path(TopFolderPath).DirectoryPath))
+    // unsigned check via cert info
+    | join kind=leftouter (
+        DeviceFileCertificateInfo
+        | where Timestamp > ago(90d)
+        | summarize arg_max(Timestamp, *) by SHA1
+        | project SHA1, IsSigned, IsTrusted
+    ) on SHA1
+    | where IsSigned != "True" or isempty(IsSigned)
+    | summarize SideloadedUnsignedDlls = make_set(FileName, 5) by InitiatingProcessSHA1 = SHA1
+) on SHA1
+| extend SideloadedUnsignedDlls = iff(isempty(SideloadedUnsignedDlls), "", strcat_array(SideloadedUnsignedDlls, "; "))
+// ── STEP 13: GOVERNANCE DIMENSIONS ──
+// Version clustering: how many distinct hashes share this filename?
+// (3 versions of putty.exe floating around = fleet drift, vet each)
+| join kind=leftouter (
+    ProvenanceCandidates | summarize VersionCount = dcount(SHA1) by FileName
+) on FileName
+| extend VersionCount = iff(isempty(VersionCount), 1, VersionCount)
+// Bundle grouping: how many candidate exes live in the same folder?
+// (12 exes in one folder = one portable suite = vet once, not per-exe)
+| join kind=leftouter (
+    ProvenanceCandidates | summarize BundleMembers = dcount(SHA1) by TopFolderPath
+) on TopFolderPath
+| extend BundleMembers = iff(isempty(BundleMembers), 1, BundleMembers)
+| order by DeviceCount desc, DistinctDays desc
