@@ -1,6 +1,6 @@
 # agent-skills
 
-Original, battle-tested agent skills in the open [Agent Skills](https://agentskills.io/specification) format (YAML frontmatter + markdown instructions, optional scripts). 33 skills, 74 files, 9 categories.
+Original, battle-tested agent skills in the open [Agent Skills](https://agentskills.io/specification) format (YAML frontmatter + markdown instructions, optional scripts). 33 skills, 75 files, 9 categories.
 
 Built and exercised inside [Hermes Agent](https://hermes-agent.nousresearch.com) on a Windows/WSL host across real production work: Microsoft Defender advanced hunting (KQL), application control and allowlisting (WDAC, AppLocker, Intune EPM), endpoint and Windows security engineering, MCP server operations and fleet tuning, agent infrastructure and skill-library maintenance, financial data engineering, and document engineering.
 
@@ -33,6 +33,18 @@ cp -r enterprise-security/mde-advanced-hunting ~/.agents/skills/   # any agentsk
 ```
 
 Scripts are optional; each skill documents its script dependencies in its body.
+
+## Serve the library over MCP
+
+`scripts/skills_mcp_server.py` exposes the whole library to any MCP client as three read-only tools: `list_skills`, `search_skills`, `get_skill`. Stdio transport, no dependencies, Python 3.11+.
+
+```bash
+python3 scripts/skills_mcp_server.py                      # run it
+hermes mcp add agent-skills --command python3 \
+    --args scripts/skills_mcp_server.py                   # wire it into Hermes
+```
+
+Verified against the official `mcp` Python client (initialize, `tools/list`, `tools/call`).
 
 ## Contributing
 

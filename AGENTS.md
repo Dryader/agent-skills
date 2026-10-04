@@ -12,7 +12,7 @@ A portfolio of original, battle-tested agent skills in the open [Agent Skills](h
 - Each skill is a **single self-contained `SKILL.md`**. Historical reference files were folded into their bodies as `## Reference:` appendix sections during the Aug 2026 restructure. Do not create new `references/` or `templates/` directories.
 - Optional `scripts/` holds runnable code (`.py`, `.ps1`, `.sh`, `.kql`) that the skill invokes. Code is the only thing that lives outside the skill body.
 - `README.md` (repo overview), `SKILLS.md` (registry), `LICENSE` (MIT), this file.
-- `scripts/validate_skills.py` (the validation gate, run by CI) and `.github/workflows/validate.yml` are repo infrastructure, not skills. Nothing else lives at the repo root.
+- `scripts/validate_skills.py` (the validation gate, run by CI), `scripts/skills_mcp_server.py` (serves this library over MCP) and `.github/workflows/validate.yml` are repo infrastructure, not skills. Nothing else lives at the repo root.
 
 ## Frontmatter dialect — the ONLY shape allowed
 
