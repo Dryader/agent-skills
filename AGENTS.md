@@ -12,6 +12,7 @@ A portfolio of original, battle-tested agent skills in the open [Agent Skills](h
 - Each skill is a **single self-contained `SKILL.md`**. Historical reference files were folded into their bodies as `## Reference:` appendix sections during the Aug 2026 restructure. Do not create new `references/` or `templates/` directories.
 - Optional `scripts/` holds runnable code (`.py`, `.ps1`, `.sh`, `.kql`) that the skill invokes. Code is the only thing that lives outside the skill body.
 - `README.md` (repo overview), `SKILLS.md` (registry), `LICENSE` (MIT), this file.
+- `scripts/validate_skills.py` (the validation gate, run by CI) and `.github/workflows/validate.yml` are repo infrastructure, not skills. Nothing else lives at the repo root.
 
 ## Frontmatter dialect — the ONLY shape allowed
 
@@ -45,6 +46,12 @@ related_skills: [<optional, top-level>]
 4. Run the validation checks below before committing.
 
 ## Validation (run before every commit)
+
+```bash
+python3 scripts/validate_skills.py   # one command, exits non-zero on failure; CI runs this
+```
+
+The checks below are the same gate spelled out for reference (and for editing the gate itself).
 
 ```bash
 # 1. frontmatter: every SKILL.md parses, name == folder, description present, no author:
@@ -97,6 +104,6 @@ echo "skills: $(find . -name SKILL.md -not -path './.git/*' | wc -l), files: $(f
 
 ## Git
 
-- Repo is private, single-lineage history.
+- Public repo, single-lineage history.
 - Commit identity: `Dryader <dryader@users.noreply.github.com>`.
 - Never commit secrets, real keys, or unscrubbed personal data.

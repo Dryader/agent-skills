@@ -1,0 +1,25 @@
+name: validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate skills
+        env:
+          # Comma-separated identity terms to scan for (real surname, employer,
+          # institution). Set as a repository secret PII_TERMS; unset means the
+          # generic PII battery only. Never commit the terms themselves.
+          PII_TERMS: ${{ secrets.PII_TERMS }}
+        run: python3 scripts/validate_skills.py

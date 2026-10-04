@@ -1,6 +1,6 @@
 # agent-skills
 
-Original, battle-tested agent skills in the open [Agent Skills](https://agentskills.io/specification) format (YAML frontmatter + markdown instructions, optional scripts). 22 skills, 48 files, 8 categories.
+Original, battle-tested agent skills in the open [Agent Skills](https://agentskills.io/specification) format (YAML frontmatter + markdown instructions, optional scripts). 22 skills, 50 files, 8 categories.
 
 Built and exercised inside [Hermes Agent](https://hermes-agent.nousresearch.com) on a Windows/WSL host across real production work: Microsoft Defender advanced hunting (KQL), application control and allowlisting (WDAC, AppLocker, Intune EPM), endpoint and Windows security engineering, MCP server operations, agent infrastructure evaluation, financial data engineering, and document engineering.
 
@@ -39,6 +39,7 @@ Scripts are optional; each skill documents its script dependencies in its body.
 
 ## Notes
 
+- **The repo validates itself.** `scripts/validate_skills.py` runs the frontmatter, dangling-path, PII and count checks below and exits non-zero on failure; `.github/workflows/validate.yml` runs it on every push and pull request.
 - Some skills reference bundled platform skills (`powerpoint`, `docx`, `arxiv`, and others) that install with the agent itself.
 - Personal identifiers were removed from this public copy. Some scripts and references still contain live-environment paths (`~/portfolio_audit/...`, `~/.hermes/...`, `C:\Users\<user>\...`); they document the workflow the skill was built against, not portable paths.
 - Skills use placeholder tokens (`[employer]`, `[institution]`, `<user>`) where specific names belong.
