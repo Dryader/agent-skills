@@ -1,8 +1,8 @@
 # agent-skills
 
-Original, battle-tested agent skills in the open [Agent Skills](https://agentskills.io/specification) format (YAML frontmatter + markdown instructions, optional scripts). 22 skills, 50 files, 8 categories.
+Original, battle-tested agent skills in the open [Agent Skills](https://agentskills.io/specification) format (YAML frontmatter + markdown instructions, optional scripts). 33 skills, 74 files, 9 categories.
 
-Built and exercised inside [Hermes Agent](https://hermes-agent.nousresearch.com) on a Windows/WSL host across real production work: Microsoft Defender advanced hunting (KQL), application control and allowlisting (WDAC, AppLocker, Intune EPM), endpoint and Windows security engineering, MCP server operations, agent infrastructure evaluation, financial data engineering, and document engineering.
+Built and exercised inside [Hermes Agent](https://hermes-agent.nousresearch.com) on a Windows/WSL host across real production work: Microsoft Defender advanced hunting (KQL), application control and allowlisting (WDAC, AppLocker, Intune EPM), endpoint and Windows security engineering, MCP server operations and fleet tuning, agent infrastructure and skill-library maintenance, financial data engineering, and document engineering.
 
 Everything here is original work written from direct experience — no adaptations, no product documentation, no personal data. Supporting material lives inside each skill body (reference files were folded in); runnable code ships as `scripts/` beside its skill.
 
@@ -11,13 +11,14 @@ Everything here is original work written from direct experience — no adaptatio
 | Category | Skills | Domain |
 |---|---|---|
 | enterprise-security | 5 | MDE KQL hunting, application control, Intune app management, vulnerability scanning, security decision documents |
-| agent-infrastructure | 4 | MCP diagnostics, agent memory and tool evaluation, editor integration |
-| research | 3 | Devil's-advocate validation, OSINT person verification, search engine routing |
-| github | 3 | Actions workflows, PR review, open-source contribution |
+| agent-infrastructure | 5 | MCP diagnostics and fleet tuning, agent memory and tool evaluation, editor integration |
+| meta | 6 | skill-library maintenance, skills-repo auditing, prompt auditing, pack import, skill slimming |
+| research | 6 | cited briefs, devil's-advocate validation, OSINT person verification, search API and engine routing, software packaging |
 | endpoint-engineering | 3 | Windows security & privacy hardening, browser privacy, WSL interop |
+| github | 3 | Actions workflows, PR review, open-source contribution |
 | documents | 2 | python-docx, OCR and document extraction |
+| dev-workflow | 2 | subagent debate, adversarial audit lifecycle |
 | finance | 1 | Financial data APIs (EDGAR, EODHD, Koyfin) |
-| dev-workflow | 1 | Subagent debate |
 
 See [SKILLS.md](SKILLS.md) for the full registry with descriptions.
 

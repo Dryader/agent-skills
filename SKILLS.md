@@ -1,16 +1,18 @@
 # Skills
 
-Index of the 22 skills in this repository, grouped by category. Each skill is a single self-contained `SKILL.md` in the open [Agent Skills](https://agentskills.io/specification) format, optionally accompanied by runnable scripts.
+Index of the 33 skills in this repository, grouped by category. Each skill is a single self-contained `SKILL.md` in the open [Agent Skills](https://agentskills.io/specification) format, optionally accompanied by runnable scripts.
 
-## agent-infrastructure (4)
+## agent-infrastructure (5)
 
 - **agent-editor-integration** — Wire Hermes to editors/IDEs: direction, endpoints, security.
 - **agent-memory-evaluation** — Should an agent get external memory (Hindsight/cognee/Zep)?
 - **agent-tool-evaluation** — Use when the user asks if a tool or system is worth adding.
+- **mcp-fleet-optimization** — Tune an MCP fleet for context cost: measure each server's tool-schema footprint, prune or exclude tools, pin what earns its place, and tell a schema cache apart from the live catalog.
 - **mcp-server-diagnostics** — Diagnose MCP server connection failures (especially hosted endpoints), choose the right endpoint + auth variant, and distinguish server outage from config error. Covers Hermes MCP client mechanics (hermes mcp list/test/login, /reload-mcp), raw HTTP endpoint probing, and known hosted-provider endpoint matrices (Firecrawl, Exa).
 
-## dev-workflow (1)
+## dev-workflow (2)
 
+- **adversarial-audit-lifecycle** — Run a system's claims through independent falsification: pre-register the claims, point blind verifiers at artifacts rather than at your own notes, triage what comes back, and apply the corrections that survive.
 - **subagent-debate** — Decision-making pattern using opposing subagent advocates. Each advocate researches and argues their position, then the parent agent judges based on evidence. Use for technology comparisons, architecture decisions, vendor evaluations, and any choice where both sides have merit.
 
 ## documents (2)
@@ -42,8 +44,20 @@ Index of the 22 skills in this repository, grouped by category. Each skill is a 
 - **github-code-review** — Review PRs: diffs, inline comments via gh or REST.
 - **open-source-contribution** — Evaluate open-source issues for contribution suitability — find easy wins, avoid design-intent traps, tier by certainty.
 
-## research (3)
+## meta (6)
 
+- **prompt-surface-audit** — Audit prompts and skills for dated instruction patterns.
+- **skill-audit** — Audit skills against their claims and recent evidence.
+- **skill-library-maintenance** — Audit a skill library's context and memory-store cost, then archive, pin or slim what does not earn its place.
+- **skill-pack-import** — Use when installing, optimizing or applying a skill pack.
+- **skill-slimming** — Use when a SKILL.md carries data. Slim it to references/.
+- **skills-repo-audit** — Audit a published skills repository: overlapping skills, broken or cross-skill references, PII and employer-scrub consistency, thin skills, and registry/tree drift.
+
+## research (6)
+
+- **cited-research-briefs** — Produce a cited research brief through a search fleet: source triage, a citation ledger, claim-to-source binding, and a verification pass before anything is published.
 - **devils-advocate-research** — Validate recommendations by searching for complaints, and do investigative deep-research on people/orgs by cross-referencing multiple sources to find contradictions and test claims against actions.
 - **osint-person-verification** — Verify a real person's identity and public footprint from a name plus anchor info — public/professional sources only, with an ethics gate. Covers name-collision disambiguation, cross-platform handle correlation, and platform-specific lookup recipes.
+- **search-api-selection** — Choose the search/scrape API for a research task: cost-aware selection across Tavily, Firecrawl, Exa, Brave and web_extract.
 - **search-engine-routing** — Use for every web search task; route engines automatically.
+- **software-packaging-research** — Use when asked how software installs or updates itself.

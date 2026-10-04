@@ -1,0 +1,22 @@
+[
+  {
+    "skill": "category/example-skill",
+    "sections": [
+      {
+        "start": "## Dated Findings (Aug 2026)",
+        "end": "## Current Procedure",
+        "ref": "findings-2026.md"
+      },
+      {
+        "start": "## Lookup Table",
+        "end": "## Current Procedure",
+        "ref": "findings-2026.md"
+      },
+      {
+        "start": "## Last section that runs to EOF",
+        "end": null,
+        "ref": "tail-content.md"
+      }
+    ]
+  }
+]

@@ -24,16 +24,19 @@ SKIP_DIRS = {".git", "__pycache__", "node_modules"}
 FORBIDDEN_KEYS = ("author:", "version:", "license:", "platforms:", "metadata:")
 SCANNED_EXT = (".md", ".py", ".ps1", ".sh", ".kql")
 PII_PATTERNS = (
-    (r"BEGIN (?:RSA|OPENSSH|EC|PGP) PRIVATE KEY", "private key"),
-    (r"\b[A-Fa-f0-9]{32,}\b", "hex blob (possible key or hash)"),
-    (r"\b[1-9]\d{8,10}\b", "9-11 digit number (possible phone or account id)"),
-    (r"C:\\Users\\(?!<|Public|Default)[A-Za-z]", "real Windows user path"),
-    (r"/home/(?!<)[a-z]+", "real POSIX home path"),
-    (r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}\b", "email address"),
+    (r"BEGIN (?:RSA|OPENSSH|EC|PGP) PRIVATE KEY", "private key", re.I),
+    (r"\b[A-Fa-f0-9]{32,}\b", "hex blob (possible key or hash)", re.I),
+    (r"\b[1-9]\d{9,10}\b", "10-11 digit number (possible phone or account id)", re.I),
+    (r"C:\\Users\\(?!<|Public|Default)[A-Za-z]", "real Windows user path", re.I),
+    (r"/home/(?!<)[a-z]+", "real POSIX home path", 0),  # paths are lowercase; /HOME/ENV is a label
+    (r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}\b", "email address", re.I),
 )
 # vendor example domains and GitHub noreply addresses are not personal data
 ALLOWED_EMAIL_DOMAINS = ("contoso.com", "example.com", "example.org", "fabrikam.com",
                          "users.noreply.github.com")
+# placeholder local parts, per the repo's placeholder convention
+PLACEHOLDER_LOCALS = {"yourname", "your-name", "your_name", "name", "user", "username",
+                      "email", "someone", "example", "me", "handle"}
 # Identity terms (real names, employers, institutions) deliberately stay OUT of this
 # public repo. Export them locally, or set PII_TERMS as a CI secret, comma-separated:
 #   PII_TERMS="surname,employer,other-employer" python3 scripts/validate_skills.py
@@ -129,12 +132,14 @@ def check_pii():
         if not path.endswith(SCANNED_EXT):
             continue
         for i, line in enumerate(open(path, encoding="utf-8", errors="replace"), 1):
-            for pat, label in PII_PATTERNS:
-                m = re.search(pat, line, re.I)
+            for pat, label, flags in PII_PATTERNS:
+                m = re.search(pat, line, flags)
                 if not m:
                     continue
-                if label == "email address" and m.group(0).lower().endswith(ALLOWED_EMAIL_DOMAINS):
-                    continue
+                if label == "email address":
+                    addr = m.group(0).lower()
+                    if addr.endswith(ALLOWED_EMAIL_DOMAINS) or addr.split("@")[0] in PLACEHOLDER_LOCALS:
+                        continue
                 errors.append(f"{rel(path)}:{i}: {label} -> {m.group(0)[:40]}")
             for term in extra:
                 if re.search(re.escape(term), line, re.I):
